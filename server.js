@@ -1,26 +1,26 @@
 // server.js
-import express from 'express';
-import cors from 'cors';
+import express from "express";
+import cors from "cors";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 
-// Sessões simples em memória
+// In-memory sessions (pilot)
 const SESSIONS = new Map();
 
 const DEFAULT_TOPIC_VOCAB = [
-  "food","snack","pizza","sandwich","juice","water","like","don’t like",
+  "food","snack","pizza","sandwich","juice","water","like","don't like",
   "I like...","My favorite..."
 ];
 
 function getSession(sessionId) {
   if (!SESSIONS.has(sessionId)) {
     SESSIONS.set(sessionId, {
-      stage: 'greeting',
+      stage: "greeting",
       askedNameOnce: false,
-      studentName: 'Student',
+      studentName: "Student",
       turns: 0,
       topic_vocab_list: DEFAULT_TOPIC_VOCAB
     });
@@ -35,25 +35,27 @@ function setSession(sessionId, state) {
 function buildNextState(userText, state) {
   let detectedName;
   if (!/\d/.test(t)) {
-    if (m) detectedName = m[2];
-    else if (/^[a-záàâãéèêíïóôõöúçñ]+$/i.test(t) && t.length <= 14) detectedName = t;
+    if (m) {
+      detectedName = m[2];
+    } else if (/^[a-záàâãéèêíïóôõöúçñ]+$/i.test(t) && t.length <= 14) {
+      detectedName = t;
+    }
   }
 
   const newState = { ...state };
 
-  if (state.stage === 'greeting' && !state.askedNameOnce) {
-    newState.askedNameOnce = true; // perguntou uma vez
+  if (state.stage === "greeting" && !state.askedNameOnce) {
+    newState.askedNameOnce = true; // asked once
   }
 
   if (detectedName) {
     const cap = detectedName.charAt(0).toUpperCase() + detectedName.slice(1);
     newState.studentName = cap;
-    newState.stage = 'conversation';
-  } else if (state.stage === 'greeting') {
-    newState.stage = 'conversation';
+    newState.stage = "conversation";
+  } else if (state.stage === "greeting") {
+    newState.stage = "conversation";
   }
 
-  // sempre incrementa turno no final
   return newState;
 }
 
@@ -62,7 +64,7 @@ function generateMockResponse(userText) {
 
   const display = likeItem
     ? `Nice! ${likeItem} is tasty. What do you like to drink with it?`
-    : `Let's practice. What food do you like?`;
+    : "Let's practice. What food do you like?";
 
   return {
     display_text: display,
@@ -79,8 +81,8 @@ function generateMockResponse(userText) {
   };
 }
 
-app.post('/api/chat', (req, res) => {
-    return res.status(400).json({ ok: false, error: 'Missing sessionId or userText' });
+app.post("/api/chat", (req, res) => {
+    return res.status(400).json({ ok: false, error: "Missing sessionId or userText" });
   }
 
   const state = getSession(sessionId);
@@ -88,10 +90,9 @@ app.post('/api/chat', (req, res) => {
 
   const payload = generateMockResponse(userText);
 
-  // garante que não volta para greeting e nome permanece
   const finalState = {
     ...nextState,
-    stage: 'conversation',
+    stage: "conversation",
     askedNameOnce: true,
   };
 
@@ -99,8 +100,8 @@ app.post('/api/chat', (req, res) => {
   return res.json({ ok: true, response: payload, state: finalState });
 });
 
-app.post('/api/set-topic', (req, res) => {
-    return res.status(400).json({ ok: false, error: 'sessionId and topic_vocab_list required' });
+app.post("/api/set-topic", (req, res) => {
+    return res.status(400).json({ ok: false, error: "sessionId and topic_vocab_list required" });
   }
   const state = getSession(sessionId);
   state.topic_vocab_list = topic_vocab_list;
@@ -108,10 +109,10 @@ app.post('/api/set-topic', (req, res) => {
   return res.json({ ok: true, state });
 });
 
-app.get('/', (_req, res) => {
-  return res.send('VivoBot backend OK');
+app.get("/", (_req, res) => {
+  return res.send("VivoBot backend OK");
 });
 
 app.listen(PORT, () => {
-  console.log('Server running on port', PORT);
+  console.log("Server running on port", PORT);
 });
