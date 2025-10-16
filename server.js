@@ -182,8 +182,13 @@ async function callModel(messages) {
       max_tokens: 300
     })
   });
-  if (!resp.ok) throw new Error('Model call failed: ' + resp.status);
-  return resp.json(); // espere algo como { content: '...JSON...' } ou choices[0].message.content
+
+  if (!resp.ok) {
+    throw new Error('Model call failed: ' + resp.status);
+  }
+
+  // Importante: este return está DENTRO da função.
+  return resp.json(); // espere { content: '...JSON...' } ou choices[0].message.content
 }
 
 // ------------------------------
