@@ -10,9 +10,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+
 const SESSIONS = new Map();
 
-// Substitua via variáveis no Render:
+// Substitua via variáveis no Render se/quando tiver IA real:
 const MODEL_ENDPOINT = process.env.ADAPTA_AGENT_ENDPOINT; // ex.: https://api.seu-agente/v1/chat
 const MODEL_API_KEY = process.env.ADAPTA_AGENT_API_KEY;   // defina no Render
 
@@ -22,6 +23,9 @@ const DEFAULT_TOPIC_VOCAB = [
   "I like...", "My favorite..."
 ];
 
+// ------------------------------
+// Sessões em memória (piloto)
+// ------------------------------
 function getSession(sessionId) {
   if (!SESSIONS.has(sessionId)) {
     SESSIONS.set(sessionId, {
@@ -39,6 +43,9 @@ function setSession(sessionId, state) {
   SESSIONS.set(sessionId, state);
 }
 
+// ------------------------------
+// Prompts do tutor
+// ------------------------------
 function buildSystemPrompt() {
   return `
 You are VivoBot, a kind, concise English conversation tutor for 5th graders (A1–A2). Use short, simple sentences and a friendly tone. Align with the morning class content (vocabulary and structures). The main goal is: practice vocabulary, build sentences, and keep Q&A flowing.
@@ -84,10 +91,12 @@ STYLE:
 function buildUserPrompt(userText, state) {
   // Heurística mínima para detectar nome
   let detectedName = undefined;
-  const t = userText.trim();
   if (!/\d/.test(t)) {
-    if (m) detectedName = m[2];
-    else if (/^[a-záàâãéèêíïóôõöúçñ]+$/i.test(t) && t.length <= 14) detectedName = t;
+    if (m) {
+      detectedName = m[2];
+    } else if (/^[a-záàâãéèêíïóôõöúçñ]+$/i.test(t) && t.length <= 14) {
+      detectedName = t;
+    }
   }
 
   const newState = { ...state };
@@ -129,8 +138,37 @@ Your task:
   };
 }
 
+// ------------------------------
+// Chamada ao modelo (com MOCK MODE)
+// ------------------------------
 async function callModel(messages) {
-  // Ajuste para o seu provedor (Adapta/Chat ONE). Exemplo genérico:
+  // MOCK MODE: sem endpoint/key => resposta simulada estável
+    const likesMatch = userMsg.match(/I like ([a-z ]+)/i);
+    const likeItem = likesMatch ? likesMatch[1] : null;
+
+    const display = likeItem
+      ? `Nice! ${likeItem} is tasty. What do you like to drink with it?`
+      : `Let's practice. What food do you like?`;
+
+    const payload = {
+      content: JSON.stringify({
+        display_text: display,
+        tts_text: display,
+        keywords: ["food","like","pizza","juice"],
+        feedback_short: "Great! Use short sentences.",
+        state: {
+          stage: "conversation",
+          askedNameOnce: true,
+          studentName: "Student",
+          turns: 0
+        },
+        state_capsule: "stage=conversation; askedNameOnce=true; studentName=Student; turns=0"
+      })
+    };
+    return payload;
+  }
+
+  // MODO REAL (quando você tiver API)
   const resp = await fetch(MODEL_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -145,12 +183,17 @@ async function callModel(messages) {
     })
   });
   if (!resp.ok) throw new Error('Model call failed: ' + resp.status);
-  return resp.json(); // espere algo como { content: '...JSON...' }
+  return resp.json(); // espere algo como { content: '...JSON...' } ou choices[0].message.content
 }
 
+// ------------------------------
+// Rotas
+// ------------------------------
 app.post('/api/chat', async (req, res) => {
   try {
     const { sessionId, userText } = req.body;
+      return res.status(400).json({ ok: false, error: 'Missing sessionId or userText' });
+    }
 
     const state = getSession(sessionId);
     const sys = buildSystemPrompt();
@@ -163,12 +206,15 @@ app.post('/api/chat', async (req, res) => {
 
     const modelResp = await callModel(messages);
 
-    // Ajuste conforme retorno do seu provedor:
+    // Extrai texto do retorno em formatos comuns
+    const text =
+      JSON.stringify(modelResp);
+
     let payload;
     try {
       payload = JSON.parse(text);
     } catch {
-      // Fallback: empacota em JSON mínimo
+      // Fallback: empacota resposta mínima, mantendo fluxo
       payload = {
         keywords: ["food","like","pizza","juice"],
         feedback_short: "",
@@ -182,7 +228,7 @@ app.post('/api/chat', async (req, res) => {
       };
     }
 
-    // Travar para nunca voltar a greeting e incrementar turno
+    // Garante: nunca voltar a greeting; incrementa turnos; preserva nome
     const finalState = {
       ...nextState,
       stage: payload?.state?.stage === 'greeting' ? 'conversation' : nextState.stage,
@@ -199,7 +245,7 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// Endpoint para trocar rapidamente o vocabulário conforme Unidade 1/2
+// Trocar rapidamente o vocabulário conforme Unidade 1/2
 app.post('/api/set-topic', (req, res) => {
   const { sessionId, topic_vocab_list } = req.body;
     return res.status(400).json({ ok: false, error: 'sessionId and topic_vocab_list required' });
