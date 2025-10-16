@@ -7,11 +7,11 @@ app.use(cors());
 app.use(express.json());
 
 
-// In-memory sessions (pilot)
+// In-memory sessions
 const SESSIONS = new Map();
 
 const DEFAULT_TOPIC_VOCAB = [
-  "food","snack","pizza","sandwich","juice","water","like","don't like",
+  "food","snack","pizza","sandwich","juice","water","like","dont like",
   "I like...","My favorite..."
 ];
 
@@ -32,40 +32,48 @@ function setSession(sessionId, state) {
   SESSIONS.set(sessionId, state);
 }
 
+// Very simple next state (no regex)
 function buildNextState(userText, state) {
-  let detectedName;
-  if (!/\d/.test(t)) {
-    if (m) {
-      detectedName = m[2];
-    } else if (/^[a-záàâãéèêíïóôõöúçñ]+$/i.test(t) && t.length <= 14) {
-      detectedName = t;
-    }
-  }
-
   const newState = { ...state };
 
+  // Ask name only once; then move to conversation
   if (state.stage === "greeting" && !state.askedNameOnce) {
-    newState.askedNameOnce = true; // asked once
+    newState.askedNameOnce = true;
+    newState.stage = "conversation";
+  } else {
+    newState.stage = "conversation";
   }
 
-  if (detectedName) {
-    const cap = detectedName.charAt(0).toUpperCase() + detectedName.slice(1);
+  // Name detection: super simple (if message starts with: my name is / i am / im)
+  const lower = text.toLowerCase();
+  let name = null;
+  if (lower.startsWith("my name is ")) {
+    name = text.slice(11).trim().split(" ")[0];
+  } else if (lower.startsWith("i am ")) {
+    name = text.slice(5).trim().split(" ")[0];
+  } else if (lower.startsWith("im ")) {
+    name = text.slice(3).trim().split(" ")[0];
+  }
+
+  if (name && name.length <= 14 && /^[a-zA-Z]+$/.test(name)) {
+    const cap = name.charAt(0).toUpperCase() + name.slice(1);
     newState.studentName = cap;
-    newState.stage = "conversation";
-  } else if (state.stage === "greeting") {
-    newState.stage = "conversation";
   }
 
   return newState;
 }
 
+// Mock response (no accents, no template literals)
 function generateMockResponse(userText) {
-  const likeItem = likeMatch ? likeMatch[1] : null;
-
-  const display = likeItem
-    ? `Nice! ${likeItem} is tasty. What do you like to drink with it?`
-    : "Let's practice. What food do you like?";
-
+  let display = "Lets practice. What food do you like?";
+  if (text.includes("i like ")) {
+    const item = text.split("i like ")[1]?.split(/[.!?,]/)[0]?.trim();
+    if (item && item.length < 25) {
+      display = "Nice! " + item + " is tasty. What do you like to drink with it?";
+    } else {
+      display = "Great! What do you like to drink with your favorite food?";
+    }
+  }
   return {
     display_text: display,
     tts_text: display,
@@ -82,6 +90,9 @@ function generateMockResponse(userText) {
 }
 
 app.post("/api/chat", (req, res) => {
+  const sessionId = body.sessionId;
+  const userText = body.userText;
+
     return res.status(400).json({ ok: false, error: "Missing sessionId or userText" });
   }
 
@@ -101,6 +112,8 @@ app.post("/api/chat", (req, res) => {
 });
 
 app.post("/api/set-topic", (req, res) => {
+  const sessionId = body.sessionId;
+  const topic_vocab_list = body.topic_vocab_list;
     return res.status(400).json({ ok: false, error: "sessionId and topic_vocab_list required" });
   }
   const state = getSession(sessionId);
