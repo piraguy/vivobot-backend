@@ -32,8 +32,7 @@ function setSession(sessionId, state) {
   SESSIONS.set(sessionId, state);
 }
 
-function buildUserPrompt(userText, state) {
-  // heurística mínima de nome
+function buildNextState(userText, state) {
   let detectedName;
   if (!/\d/.test(t)) {
     if (m) detectedName = m[2];
@@ -54,10 +53,10 @@ function buildUserPrompt(userText, state) {
     newState.stage = 'conversation';
   }
 
-  return { nextState: newState };
+  // sempre incrementa turno no final
+  return newState;
 }
 
-// MOCK MODE: gera resposta estável e curta
 function generateMockResponse(userText) {
   const likeItem = likeMatch ? likeMatch[1] : null;
 
@@ -80,45 +79,37 @@ function generateMockResponse(userText) {
   };
 }
 
-app.post('/api/chat', async (req, res) => {
-  try {
-    const { sessionId, userText } = req.body;
-      return res.status(400).json({ ok: false, error: 'Missing sessionId or userText' });
-    }
-
-    const state = getSession(sessionId);
-    const { nextState } = buildUserPrompt(userText, state);
-
-    // Resposta simulada (depois trocamos para IA real, se desejar)
-    const payload = generateMockResponse(userText);
-
-    const finalState = {
-      ...nextState,
-      stage: 'conversation',
-      askedNameOnce: true,
-      turns: nextState.turns + 1
-    };
-
-    setSession(sessionId, finalState);
-    res.json({ ok: true, response: payload, state: finalState });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ ok: false, error: String(err) });
+app.post('/api/chat', (req, res) => {
+    return res.status(400).json({ ok: false, error: 'Missing sessionId or userText' });
   }
+
+  const state = getSession(sessionId);
+  const nextState = buildNextState(userText, state);
+
+  const payload = generateMockResponse(userText);
+
+  // garante que não volta para greeting e nome permanece
+  const finalState = {
+    ...nextState,
+    stage: 'conversation',
+    askedNameOnce: true,
+  };
+
+  setSession(sessionId, finalState);
+  return res.json({ ok: true, response: payload, state: finalState });
 });
 
 app.post('/api/set-topic', (req, res) => {
-  const { sessionId, topic_vocab_list } = req.body;
     return res.status(400).json({ ok: false, error: 'sessionId and topic_vocab_list required' });
   }
   const state = getSession(sessionId);
   state.topic_vocab_list = topic_vocab_list;
   setSession(sessionId, state);
-  res.json({ ok: true, state });
+  return res.json({ ok: true, state });
 });
 
-app.get('/', (req, res) => {
-  res.send('VivoBot backend OK');
+app.get('/', (_req, res) => {
+  return res.send('VivoBot backend OK');
 });
 
 app.listen(PORT, () => {
